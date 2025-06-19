@@ -1,22 +1,19 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Query
+import os
+import uuid
+from datetime import datetime
+from typing import List
+
+from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse
-import os
-import time
-from typing import List, Optional
-from datetime import datetime
-import uuid
 
 # Import our custom modules
 from app import config
 from app.config import DEBUG
 from app.models import (
     StatusResponse,
-    QuestionResponse,
     FileUploadResponse,
-    MultipleFileUploadResponse,
-    SourceDocument
+    MultipleFileUploadResponse
 )
 
 # Create FastAPI app

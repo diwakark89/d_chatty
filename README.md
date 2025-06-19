@@ -1,15 +1,28 @@
-# Chatty API
 # DChatty - PDF Question Answering System
 
-DChatty is a PDF Question Answering system built with FastAPI, Langchain, and Ollama. It allows users to upload PDF documents and ask questions about their content, receiving accurate answers with source references.
+DChatty is a robust PDF Question Answering system built with FastAPI, Langchain, and Ollama. It allows users to upload PDF documents and ask questions about their content, receiving accurate answers with source references.
 
 ## Features
 
-- PDF document processing and indexing
-- Question answering with source attribution
-- Multiple model support via Ollama integration
-- Web-based user interface
-- REST API for integration with other systems
+- **PDF Processing**: Upload and process PDF documents for question answering
+- **AI-Powered QA**: Ask natural language questions about document content
+- **Source Attribution**: Answers include references to the source text
+- **Multiple Model Support**: Switch between different LLM models via Ollama
+- **Model Management**: Browse, download and manage Ollama models directly from the UI
+- **Optimized Performance**: TF-IDF vectorization and FAISS for fast retrieval
+- **Web Interface**: Clean, intuitive UI for easy interaction
+- **API Integration**: Comprehensive REST API for integration with other systems
+
+## Tech Stack
+
+- **Backend**: FastAPI, Python 3.11
+- **AI Components**: 
+  - Langchain for document processing workflow
+  - FAISS for vector storage and similarity search
+  - Ollama for running local LLM models
+  - TF-IDF from scikit-learn for efficient document embedding
+- **Storage**: File-based state persistence
+- **Documentation**: Auto-generated Swagger/OpenAPI docs
 
 ## Installation
 
@@ -18,7 +31,7 @@ DChatty is a PDF Question Answering system built with FastAPI, Langchain, and Ol
 - Python 3.11+
 - [Ollama](https://ollama.ai/) running locally or accessible via network
 
-### Setup
+### Local Setup
 
 1. Clone the repository:
    ```bash
@@ -37,7 +50,7 @@ DChatty is a PDF Question Answering system built with FastAPI, Langchain, and Ol
 
 3. Install dependencies:
    ```bash
-   pip install -r requirements_fixed.txt
+   pip install -r requirements.txt
    ```
 
 4. Create a `.env` file from the example:
@@ -46,87 +59,106 @@ DChatty is a PDF Question Answering system built with FastAPI, Langchain, and Ol
    # Edit .env as needed
    ```
 
-## Usage
+5. Start the server:
+   ```bash
+   python run.py
+   # Or directly with uvicorn
+   uvicorn app.main:app --reload
+   ```
 
-### Starting the Server
+### Docker Deployment
 
-```bash
-python run.py
-```
-
-The server will start at http://localhost:8000 by default.
-
-### Opening the Web Interface
-
-Run the access script to open the web interface in your browser:
-
-```bash
-./access_app.bat  # Windows
-```
-
-Or navigate to http://localhost:8000/static/index.html in your browser.
-
-### API Documentation
-
-API documentation is available at http://localhost:8000/docs
-
-## Docker Deployment
-
-You can use Docker Compose to run the complete system:
+For a complete setup with all services, use Docker Compose:
 
 ```bash
 docker-compose up -d
 ```
 
 This will start:
-- The DChatty API server
-- Ollama LLM server
-- Open WebUI (optional interface for Ollama)
+- DChatty API server
+- Ollama LLM service
+- PostgreSQL database
+- pgAdmin for database management
+- Open WebUI (optional Ollama interface)
+
+## Usage
+
+### Web Interface
+
+Access the web interface at http://localhost:8000/static/index.html
+
+1. Upload a PDF document using the upload button
+2. Wait for processing confirmation
+3. Select an AI model from the dropdown (if multiple are available)
+4. Type your question in the input field
+5. View the answer and its source references
+
+### API Documentation
+
+API documentation is available at:
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+
+See `access_instructions.md` for detailed API endpoint information.
 
 ## Project Structure
 
-- `app/` - Main application code
-  - `main.py` - FastAPI application entry point
-  - `routers/` - API route definitions
-  - `qa_service.py` - Question answering service
-- `static/` - Static web files
-- `docs/` - Documentation files
-- `uploads/` - Directory for uploaded files (created at runtime)
+```
+.
+├── app/                  # Main application code
+│   ├── __init__.py       # Package initialization
+│   ├── config.py         # Configuration settings
+│   ├── file_service.py   # File handling utilities
+│   ├── get_answer.py     # Question answering logic
+│   ├── main.py           # FastAPI application entry point
+│   ├── models.py         # Data models 
+│   ├── persistence.py    # State persistence functionality
+│   ├── qa_service.py     # QA service with FAISS and embeddings
+│   └── routers/          # API route definitions
+│       ├── __init__.py   # Routers package initialization
+│       ├── files.py      # File management endpoints
+│       ├── models.py     # Model management endpoints
+│       ├── pdf_qa.py     # PDF QA endpoints
+│       ├── status.py     # System status endpoint
+│       └── ui.py         # User interface endpoints
+├── static/               # Static web files
+├── uploads/              # Directory for uploaded files
+├── docker-compose.yml    # Docker Compose configuration
+├── Dockerfile.api        # API Dockerfile
+├── requirements.txt      # Python dependencies
+└── README.md             # Project documentation
+```
 
 ## Configuration
 
 Configuration is handled through environment variables or the `.env` file:
 
-- `HOST` - Server host (default: 0.0.0.0)
-- `PORT` - Server port (default: 8000)
-- `OLLAMA_MODEL` - Default Ollama model to use (default: phi3)
-- `EMBEDDING_MODEL` - Model for text embeddings (default: all-MiniLM-L6-v2)
+- `HOST`: Server host (default: 0.0.0.0)
+- `PORT`: Server port (default: 8000)
+- `RELOAD`: Enable hot reload for development (default: True)
+- `DEBUG`: Enable debug mode (default: True)
+- `UPLOAD_DIR`: Directory to store uploaded files (default: uploads)
+- `MAX_UPLOAD_SIZE`: Maximum upload file size in bytes (default: 100MB)
+- `OLLAMA_MODEL`: Default Ollama model to use (default: phi3)
+- `OLLAMA_BASE_URL`: URL for Ollama API (default: http://localhost:11434)
+
+## Ollama Models
+
+The system works with various Ollama models. To add a model:
+
+```bash
+ollama pull phi3       # Microsoft's Phi-3 model
+ollama pull mistral     # Mistral 7B
+ollama pull llama2      # Meta's Llama 2
+```
+
+## Troubleshooting
+
+See `access_instructions.md` for detailed troubleshooting information.
 
 ## License
 
 MIT
-A FastAPI-based backend for Chatty application with file upload capabilities.
-
-## Features
-
-- File Upload API endpoints
-- Single and multiple file uploads
-- Docker containerization
-- Integration with PostgreSQL
-
-## API Endpoints
-
-- `GET /` - Basic health check
-- `POST /api/upload` - Upload a single file
-- `POST /api/upload/multiple` - Upload multiple files
-
-## Development
-
-### Running with Docker Desktop
-
-1. **Install Docker Desktop**
-   - Download and install Docker Desktop from [docker.com](https://www.docker.com/products/docker-desktop/)
-   - Complete the installation and start Docker Desktop
 # DChatty - PDF QA System
 
 DChatty is a robust PDF Question Answering system that uses AI to extract information from documents and provide accurate answers to user queries.

@@ -1,6 +1,103 @@
 # Chatty API
 # DChatty - PDF Question Answering System
+# PDF QA Application
 
+## Overview
+
+This application allows you to upload PDF documents and ask questions about their content. It uses AI-powered question answering to extract information from the documents.
+
+## Features
+
+- PDF document upload and processing
+- AI-powered question answering
+- Vector-based semantic search
+- State persistence across application restarts
+- Optimized for memory efficiency
+
+## Installation
+
+### Prerequisites
+
+- Python 3.11+
+- Ollama (for LLM inference)
+
+### Setup
+
+1. Clone this repository
+2. Create a virtual environment:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+```
+
+3. Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+4. Set up your environment variables in a `.env` file (see `.env.example`)
+
+## Running the Application
+
+### Development Mode
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### Production Mode
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+```
+
+### Simple Static Server
+
+To serve the static HTML interface:
+
+```bash
+python serve_static.py
+```
+
+## API Endpoints
+
+- `GET /`: Root endpoint - API status
+- `GET /status/`: System status information
+- `POST /api/upload`: Upload a PDF file
+- `POST /api/ask`: Ask a question about an uploaded PDF
+
+## Performance Optimization
+
+This application has been optimized for performance and memory efficiency. Key optimizations include:
+
+- Sparse matrix usage for embeddings
+- Query result caching
+- Optimized chunking strategies
+- LLM model instance reuse
+
+See `docs/optimization.md` for more details on performance tuning.
+
+## Persistence
+
+The application supports state persistence across restarts. See `docs/persistence.md` for more information.
+
+## Environment Variables
+
+- `HOST`: Server host (default: 0.0.0.0)
+- `PORT`: Server port (default: 8000)
+- `RELOAD`: Enable auto-reload (default: True)
+- `DEBUG`: Enable debug mode (default: True)
+- `EMBEDDING_MODEL`: Embedding model name (default: sklearn-tfidf)
+- `OLLAMA_MODEL`: Ollama model to use (default: mistral)
+- `OLLAMA_BASE_URL`: URL for Ollama API (default: http://localhost:11434)
+- `UPLOAD_DIR`: Directory for uploaded files (default: uploads)
+- `MAX_UPLOAD_SIZE`: Maximum upload size in bytes (default: 100MB)
+
+## License
+
+MIT
 DChatty is a PDF Question Answering system built with FastAPI, Langchain, and Ollama. It allows users to upload PDF documents and ask questions about their content, receiving accurate answers with source references.
 
 ## Features

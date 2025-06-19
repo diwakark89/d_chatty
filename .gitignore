@@ -18,6 +18,10 @@ env/
 # Uploads directory
 uploads/
 
+# Persistence data
+data/
+*.pkl
+
 # Distribution / packaging
 dist/
 build/

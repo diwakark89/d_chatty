@@ -1,36 +1,46 @@
-# PDF QA System Persistence
+# Persistence
 
 ## Overview
 
-The PDF QA system now supports persistence across server restarts. This means that if you upload a PDF and then restart the application, the system will attempt to restore the previously uploaded PDF's data.
+DChatty persists QA runtime state so the latest uploaded PDF vector store can be restored after restart.
 
-## How It Works
+## Storage Layout
 
-1. When a PDF is uploaded and processed, the system saves the vector store state to disk
-2. When the application starts, it checks for a saved state file
-3. If found, it restores the vector store and QA chain
+- Primary file: `data/qa_state.pkl.gz`
+- Backup directory: `data/backups/`
+- Legacy format support: `data/qa_state.pkl` (auto-migrated when detected)
+
+## Save Strategy
+
+State is saved with:
+
+1. Gzip compression
+2. Atomic write via temporary file + move
+3. Backup creation when overwriting existing state
+4. Backup rotation (keeps the most recent 5 backups)
+
+## Load Strategy
+
+On startup/load:
+
+1. Try `data/qa_state.pkl.gz`
+2. If invalid/corrupt, attempt latest backup recovery from `data/backups/`
+3. If primary format does not exist, attempt legacy `data/qa_state.pkl` and migrate
+
+Only valid state objects containing `vector_store` are restored.
 
 ## Limitations
 
-- The current implementation only saves the most recent PDF
-- If you upload a new PDF, it will overwrite the previous state
-- Some aspects of the QA chain may need to be recreated on startup
-
-## Data Location
-
-Persistence data is stored in the `data/` directory in the project root:
-- `data/qa_state.pkl`: Contains the serialized vector store and metadata
+- Current design stores only the most recently processed PDF state.
+- Multi-document persistence is not part of the current implementation.
 
 ## Troubleshooting
 
-If you experience issues with persistence:
+1. Corrupt primary state:
+   - App attempts backup recovery automatically.
 
-1. Check the application logs for error messages
-2. Try deleting the `data/qa_state.pkl` file to start fresh
-3. Ensure the application has write permissions to the `data/` directory
+2. Corrupt backup chain:
+   - Remove stale files in `data/` and re-upload a PDF.
 
-## Future Improvements
-
-- Support for multiple saved PDFs
-- More robust serialization/deserialization
-- Database-backed persistence instead of file-based
+3. Permission errors:
+   - Ensure process can read/write the `data/` directory.

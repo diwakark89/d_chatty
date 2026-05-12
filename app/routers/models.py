@@ -1,73 +1,39 @@
-import os
+import logging
 import requests
-from typing import Dict, Any
 from fastapi import APIRouter, HTTPException, Query
 
 from app import config
 from app import qa_service
 
 router = APIRouter(prefix="/models", tags=["Models"])
+logger = logging.getLogger(__name__)
 
-# Default models for fallback when Ollama is not available
-DEFAULT_MODELS = [
-    {
-        "id": "mistral",
-        "name": "Mistral 7B",
-        "description": "Mistral 7B is a fast and accurate open-source LLM",
-        "parameters": "7B",
-        "is_default": True
-    },
-    {
-        "id": "llama2",
-        "name": "Llama 2",
-        "description": "Meta's Llama 2 model",
-        "parameters": "7B",
-        "is_default": False
-    },
-    {
-        "id": "phi3",
-        "name": "Phi-3",
-        "description": "Microsoft's Phi-3 model",
-        "parameters": "3.8B", 
-        "is_default": False
-    }
-]
+
+def _raise_ollama_unavailable(exc: Exception) -> None:
+    logger.warning("Ollama is unavailable: %s", exc)
+    raise HTTPException(status_code=503, detail="Ollama service is unavailable") from exc
+
+
 @router.get("/list")
 async def list_models():
     """
     List all available models from Ollama
     """
     try:
-        # Try to get models from Ollama API
         try:
             response = requests.get(f"{config.OLLAMA_BASE_URL}/api/tags", timeout=3)
-            if response.status_code == 200:
-                models = response.json().get("models", [])
-                return {
-                    "status": "success",
-                    "models": models,
-                    "count": len(models)
-                }
-        except requests.RequestException as e:
-            # If Ollama API request fails, log the error but continue to fallback
-            print(f"Ollama API request failed: {e}")
+        except requests.RequestException as exc:
+            _raise_ollama_unavailable(exc)
 
-        # Fallback to default models if Ollama API fails
-        formatted_models = []
-        for model in DEFAULT_MODELS:
-            formatted_models.append({
-                "name": model["id"],
-                "modified_at": "",
-                "size": 0
-            })
+        if response.status_code != 200:
+            raise HTTPException(status_code=503, detail="Ollama service is unavailable")
 
-        return {
-            "status": "success",
-            "models": formatted_models,
-            "count": len(formatted_models)
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error listing models: {str(e)}")
+        models = response.json().get("models", [])
+        return {"status": "success", "models": models, "count": len(models)}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Error listing models") from exc
 
 @router.get("/info/{model_name}")
 async def get_model_info(model_name: str):
@@ -75,34 +41,25 @@ async def get_model_info(model_name: str):
     Get information about a specific model
     """
     try:
-        # Try to get model info from Ollama API
         try:
             response = requests.get(f"{config.OLLAMA_BASE_URL}/api/show?name={model_name}", timeout=3)
-            if response.status_code == 200:
-                return {
-                    "status": "success",
-                    "model": model_name,
-                    "info": response.json()
-                }
-        except requests.RequestException as e:
-            # If Ollama API request fails, log the error but continue to fallback
-            print(f"Ollama API request failed: {e}")
+        except requests.RequestException as exc:
+            _raise_ollama_unavailable(exc)
 
-        # Fallback to default models if Ollama API fails
-        for model in DEFAULT_MODELS:
-            if model["id"] == model_name:
-                return {
-                    "status": "success",
-                    "model": model_name,
-                    "info": model
-                }
+        if response.status_code == 404:
+            raise HTTPException(status_code=404, detail=f"Model {model_name} not found")
+        if response.status_code != 200:
+            raise HTTPException(status_code=503, detail="Ollama service is unavailable")
 
-        # If we reach here, the model was not found
-        raise HTTPException(status_code=404, detail=f"Model {model_name} not found")
+        return {
+            "status": "success",
+            "model": model_name,
+            "info": response.json(),
+        }
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error getting model info: {str(e)}")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Error getting model info") from exc
 
 @router.post("/change")
 async def change_model(model_name: str = Query(..., description="Name of the model to use")):
@@ -118,5 +75,7 @@ async def change_model(model_name: str = Query(..., description="Name of the mod
             "message": f"Model changed to {model_name}",
             "model": model_name
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error changing model: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Error changing model") from exc

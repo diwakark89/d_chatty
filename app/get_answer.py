@@ -63,4 +63,4 @@ def get_answer(qa_chain, vector_store, query: str, model_name: Optional[str] = N
         raise
     except Exception as e:
         logger.error(f"Error getting answer: {e}")
-        raise HTTPException(status_code=500, detail=f"Error processing question: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error processing question") from e

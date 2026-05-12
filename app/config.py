@@ -24,7 +24,11 @@ ALLOWED_EXTENSIONS = [".pdf", ".txt", ".md"]
 
 # API settings
 API_PREFIX = os.getenv("API_PREFIX", "")
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
+CORS_ORIGINS = [
+	origin.strip()
+	for origin in os.getenv("CORS_ORIGINS", "http://localhost:8000").split(",")
+	if origin.strip()
+]
 
 # Create necessary directories
 os.makedirs(UPLOAD_DIR, exist_ok=True)

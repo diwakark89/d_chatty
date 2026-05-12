@@ -17,4 +17,4 @@ async def get_status() -> Dict[str, Any]:
             status_data["status"] = "ok"
         return status_data
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error getting system status: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error getting system status") from e

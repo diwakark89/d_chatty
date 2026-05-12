@@ -1,92 +1,58 @@
-# Accessing Your DChatty FastAPI Application
+# Access Instructions
 
-## Basic Access
+## Base URLs
 
-Your FastAPI application is running on `http://0.0.0.0:8000`, which means it's accessible through:
+When running locally:
 
-- `http://localhost:8000` (from the same machine)
-- `http://your-ip-address:8000` (from other devices on the same network)
+- API root: `http://127.0.0.1:8000`
+- Status: `http://127.0.0.1:8000/status`
+- Swagger docs: `http://127.0.0.1:8000/docs`
+- Web UI: `http://127.0.0.1:8000/static/index.html`
 
-## Available Endpoints
+## API Endpoints
 
-### API Endpoints
+### PDF QA
 
-- PDF Processing:
-  - `POST /api/v1/pdf/upload`: Upload a PDF file for processing
-  - `GET /api/v1/pdf/ask?query=YOUR_QUESTION`: Ask a question about the uploaded PDF
+- `POST /api/v1/pdf/upload`
+  - Multipart form field: `file`
+  - Validates extension, size, and PDF signature
+- `GET /api/v1/pdf/ask?query=...&model=...`
+  - `query` is required
+  - `model` is optional
 
-- File Management:
-  - `GET /api/v1/files/list`: List all uploaded files
-  - `DELETE /api/v1/files/delete?filename=YOUR_FILE.pdf`: Delete an uploaded file
+### Files
 
-- Model Management:
-  - `GET /api/v1/models/list`: List locally available Ollama models
-  - `GET /api/v1/models/info?model=MODEL_NAME`: Get info about a specific model
-  - `GET /api/v1/models/available`: Get list of models available from Ollama website
-  - `POST /api/v1/models/download`: Download a model from Ollama (requires model_name in body)
-  - `GET /api/v1/models/download-status/{model_name}`: Check download status of a model
-  - `POST /api/v1/models/delete`: Delete a model from local storage
+- `GET /api/v1/files/list`
+- `GET /api/v1/files/list?type=pdf`
+- `DELETE /api/v1/files/delete/{filename}`
 
-- System Status:
-  - `GET /status`: Get the current system status
+### Models
 
-### Documentation
+- `GET /api/v1/models/list`
+  - Returns 503 when Ollama is unreachable
+- `GET /api/v1/models/info/{model_name}`
+- `POST /api/v1/models/change?model_name=...`
 
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
+## Docker Service Ports
 
-### Web Interface
+- API: `8000`
+- Ollama: `11434`
+- PostgreSQL: `5433`
+- pgAdmin: `5051`
+- Open WebUI: `3000`
 
-The web interface is available at:
-- `http://localhost:8000/static/index.html`
+## Common Troubleshooting
 
-## Using Docker
+1. `503 Ollama service is unavailable`
+   - Ensure Ollama container/process is running.
+   - Verify `OLLAMA_BASE_URL` points to the correct host.
 
-If you're using Docker, the application is accessible at the same URLs, but you can also access related services:
+2. `Only PDF files are accepted` or `Uploaded file content is not a valid PDF`
+   - Ensure the uploaded file is a real PDF, not a renamed non-PDF file.
 
-- **Ollama API**: `http://localhost:11434`
-- **Open WebUI** (Ollama interface): `http://localhost:3000`
-- **pgAdmin** (Database management): `http://localhost:5051` (login with admin@example.com / admin)
+3. `No PDF has been uploaded yet`
+   - Upload a PDF first through `POST /api/v1/pdf/upload`.
 
-## API Authentication
-
-Currently, the API does not require authentication. In production environments, you should enable authentication by:
-
-1. Configuring API keys or OAuth in the `.env` file
-2. Setting up proper CORS restrictions
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Cannot connect to the application**
-   - Ensure the server is running
-   - Check that the port 8000 is not blocked by a firewall
-   - Verify that your Docker containers are running if using Docker
-
-2. **PDF processing fails**
-   - Ensure the PDF is not password-protected
-   - Check that the PDF file is not corrupted
-   - Make sure Ollama service is running and accessible
-
-3. **Slow response times**
-   - Large PDFs may take longer to process
-   - First-time model loading in Ollama can be slow
-   - Check system resources (CPU, RAM) if performance is consistently poor
-
-### Logs
-
-Access logs by:
-
-- Viewing terminal output when running locally
-- Using Docker logs: `docker logs chatty_api`
-- Checking pgAdmin for database logs
-
-## Development Setup
-
-For development, enable hot reload:
-
-1. Set `RELOAD=True` in your `.env` file
-2. Run with uvicorn directly: `uvicorn app.main:app --reload`
-
-This allows changes to be immediately reflected without restarting the server.
+4. Upload rejected with `413`
+   - File exceeded `MAX_UPLOAD_SIZE`.
+   - Increase the value in `.env` if needed.

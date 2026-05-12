@@ -1,14 +1,12 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:17.4
     container_name: chatty_postgres
     restart: always
     environment:
-      POSTGRES_USER: chatty_user
-      POSTGRES_PASSWORD: chatty_pass
-      POSTGRES_DB: chatty_db
+      POSTGRES_USER: ${POSTGRES_USER:-chatty_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
+      POSTGRES_DB: ${POSTGRES_DB:-chatty_db}
     ports:
       - "5433:5432"
     volumes:
@@ -19,12 +17,12 @@ services:
     container_name: chatty_pgadmin
     restart: always
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@example.com  # Default pgAdmin login email
-      PGADMIN_DEFAULT_PASSWORD: admin          # Default pgAdmin login password
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-change_me}
     ports:
-      - "5051:80"  # Expose pgAdmin on port 5050
+      - "5051:80"
     depends_on:
-      - postgres   # Ensure pgAdmin starts after PostgreSQL
+      - postgres
 
   api:
     build:
@@ -43,8 +41,10 @@ services:
       - RELOAD=False
       - DEBUG=False
       - UPLOAD_DIR=/app/uploads
-      - OLLAMA_MODEL=phi3
-      - EMBEDDING_MODEL=all-MiniLM-L6-v2
+      - MAX_UPLOAD_SIZE=${MAX_UPLOAD_SIZE:-100000000}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-mistral}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-sklearn-tfidf}
     depends_on:
       - postgres
       - ollama
@@ -67,7 +67,7 @@ services:
       - "3000:3000"
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
-      - WEBUI_SECRET_KEY=9f8c4e2a1b3d5f6a7c8e9d0b1a2c3e4f5d6b7a8c9e0f1d2c3b4a5e6f7d8c9b0
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY:-change_me}
     depends_on:
       - ollama
     restart: unless-stopped

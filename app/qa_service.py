@@ -1,7 +1,8 @@
 import logging
 import os
+import threading
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 
 import numpy as np
 from fastapi import HTTPException
@@ -16,8 +17,6 @@ from sklearn.preprocessing import normalize
 
 from app.config import OLLAMA_MODEL, OLLAMA_BASE_URL
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class SimpleSklearnEmbeddings:
@@ -89,6 +88,7 @@ logger.info("Initialized optimized TF-IDF embeddings")
 # Global variables for vector store and QA chain
 vector_store: Optional[FAISS] = None
 qa_chain: Optional[RetrievalQA] = None
+state_lock = threading.RLock()
 
 # Try to load saved state at module initialization
 try:
@@ -97,7 +97,8 @@ try:
     saved_state = persistence.load_qa_state()
     if saved_state and "vector_store" in saved_state:
         logger.info("Found saved QA state, restoring...")
-        vector_store = saved_state["vector_store"]
+        with state_lock:
+            vector_store = saved_state["vector_store"]
         logger.info(f"Restored vector store with {vector_store.index.ntotal} vectors")
         logger.info("State loaded successfully")
 except Exception as e:
@@ -110,6 +111,10 @@ llm_cache = {}
 # Simple query cache
 query_cache = {}
 
+
+def _build_cache_key(query: str, model_name: Optional[str]) -> Tuple[str, str]:
+    return (model_name or OLLAMA_MODEL, query)
+
 # Import get_answer utility
 from app.get_answer import get_answer as get_answer_impl
 
@@ -121,47 +126,50 @@ def initialize_qa_chain(model_name=None):
     """
     global qa_chain, vector_store, llm_cache
 
-    if vector_store is None:
-        raise HTTPException(status_code=400, detail="No PDF has been uploaded yet. Please upload a PDF first.")
-
     try:
-        # Use the specified model or fall back to the default
-        model_to_use = model_name or OLLAMA_MODEL
-        logger.info(f"Initializing QA chain with model: {model_to_use}")
+        with state_lock:
+            if vector_store is None:
+                raise HTTPException(status_code=400, detail="No PDF has been uploaded yet. Please upload a PDF first.")
 
-        # Check if we already have this model in cache
-        if model_to_use in llm_cache:
-            logger.info(f"Using cached LLM for model: {model_to_use}")
-            llm = llm_cache[model_to_use]
-        else:
-            # Create new LLM and cache it
-            logger.info(f"Creating new LLM instance for model: {model_to_use}")
-            llm = Ollama(model=model_to_use, base_url=OLLAMA_BASE_URL)
-            llm_cache[model_to_use] = llm
+            # Use the specified model or fall back to the default
+            model_to_use = model_name or OLLAMA_MODEL
+            logger.info(f"Initializing QA chain with model: {model_to_use}")
 
-        # Configure optimized retriever with higher k for better recall
-        retriever = vector_store.as_retriever(
-            search_type="similarity",
-            search_kwargs={
-                "k": 5,  # Retrieve more documents for better context
-                "fetch_k": 10  # Consider more candidates before filtering to k
-            }
-        )
+            # Check if we already have this model in cache
+            if model_to_use in llm_cache:
+                logger.info(f"Using cached LLM for model: {model_to_use}")
+                llm = llm_cache[model_to_use]
+            else:
+                # Create new LLM and cache it
+                logger.info(f"Creating new LLM instance for model: {model_to_use}")
+                llm = Ollama(model=model_to_use, base_url=OLLAMA_BASE_URL)
+                llm_cache[model_to_use] = llm
 
-        # Create QA chain with optimized parameters
-        qa_chain = RetrievalQA.from_chain_type(
-            llm=llm,
-            chain_type="stuff",  # Simple document concatenation
-            retriever=retriever,
-            return_source_documents=True,
-            verbose=False
-        )
+            # Configure optimized retriever with higher k for better recall
+            retriever = vector_store.as_retriever(
+                search_type="similarity",
+                search_kwargs={
+                    "k": 5,  # Retrieve more documents for better context
+                    "fetch_k": 10  # Consider more candidates before filtering to k
+                }
+            )
 
-        logger.info("QA chain initialized successfully")
-        return qa_chain
+            # Create QA chain with optimized parameters
+            qa_chain = RetrievalQA.from_chain_type(
+                llm=llm,
+                chain_type="stuff",  # Simple document concatenation
+                retriever=retriever,
+                return_source_documents=True,
+                verbose=False
+            )
+
+            logger.info("QA chain initialized successfully")
+            return qa_chain
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to initialize QA chain: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to initialize QA chain: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to initialize QA chain") from e
 
 
 def get_answer(query: str, model_name: Optional[str] = None) -> Dict[str, Any]:
@@ -174,22 +182,25 @@ def get_answer(query: str, model_name: Optional[str] = None) -> Dict[str, Any]:
     Returns:
         Dict containing answer and source documents
     """
-    # Use query cache if available
-    cache_key = f"{model_name or OLLAMA_MODEL}:{query}"
-    if cache_key in query_cache:
-        logger.info(f"Using cached answer for query: {query}")
-        return query_cache[cache_key]
+    cache_key = _build_cache_key(query, model_name)
+    with state_lock:
+        if cache_key in query_cache:
+            logger.info(f"Using cached answer for query: {query}")
+            return query_cache[cache_key]
+
+        current_qa_chain = qa_chain
+        current_vector_store = vector_store
 
     # Use the implementation from get_answer.py
-    response = get_answer_impl(qa_chain, vector_store, query, model_name, initialize_qa_chain)
+    response = get_answer_impl(current_qa_chain, current_vector_store, query, model_name, initialize_qa_chain)
 
-    # Cache the result
-    query_cache[cache_key] = response
+    with state_lock:
+        query_cache[cache_key] = response
 
-    # Maintain cache size
-    if len(query_cache) > MAX_CACHE_SIZE:
-        oldest_key = next(iter(query_cache))
-        del query_cache[oldest_key]
+        # Maintain cache size
+        if len(query_cache) > MAX_CACHE_SIZE:
+            oldest_key = next(iter(query_cache))
+            del query_cache[oldest_key]
 
     return response
 
@@ -245,8 +256,9 @@ def process_pdf(file_path: str) -> Dict[str, Any]:
 
         # First try the standard method
         success = False
+        new_vector_store = None
         try:
-            vector_store = FAISS.from_documents(chunks, embeddings)
+            new_vector_store = FAISS.from_documents(chunks, embeddings)
             success = True
             logger.info("Successfully created vector store using standard method")
         except Exception as e:
@@ -256,20 +268,7 @@ def process_pdf(file_path: str) -> Dict[str, Any]:
         if not success:
             try:
                 logger.info("Trying first fallback method with manual embedding")
-                # Convert sparse matrix to dense array
-                sparse_embeddings = embeddings.embed_documents(texts)
-                dense_embeddings = sparse_embeddings.toarray()
-
-                # Create a new FAISS index from scratch
-                import faiss
-                dimension = dense_embeddings.shape[1]  # Get dimension from the embeddings
-                index = faiss.IndexFlatL2(dimension)   # Use L2 distance for similarity
-
-                # Add vectors to the index
-                index.add(np.array(dense_embeddings).astype('float32'))
-
-                # Create the vector store with the manual index
-                vector_store = FAISS(embeddings, index, texts, metadatas)
+                new_vector_store = FAISS.from_texts(texts, embeddings, metadatas=metadatas)
                 success = True
                 logger.info("Successfully created vector store using first fallback method")
             except Exception as e:
@@ -284,12 +283,16 @@ def process_pdf(file_path: str) -> Dict[str, Any]:
                 reduced_metadatas = metadatas[:min(50, len(metadatas))]
 
                 # Use the most basic FAISS setup
-                vector_store = FAISS.from_texts(reduced_texts, embeddings, reduced_metadatas)
+                new_vector_store = FAISS.from_texts(reduced_texts, embeddings, metadatas=reduced_metadatas)
                 success = True
                 logger.warning("Created vector store with reduced data (only first 50 chunks)")
             except Exception as e:
                 logger.error(f"All fallback methods failed: {e}")
                 raise HTTPException(status_code=500, detail="Failed to create vector store after multiple attempts")
+
+        with state_lock:
+            vector_store = new_vector_store
+            qa_chain = None
 
         # Initialize QA chain
         initialize_qa_chain()
@@ -297,8 +300,10 @@ def process_pdf(file_path: str) -> Dict[str, Any]:
         # Save the state for persistence across restarts
         try:
             from app import persistence
+            with state_lock:
+                persisted_vector_store = vector_store
             state = {
-                "vector_store": vector_store,
+                "vector_store": persisted_vector_store,
                 "total_pages": len(documents),
                 "chunks_created": len(chunks),
                 "timestamp": datetime.now().isoformat()
@@ -318,19 +323,27 @@ def process_pdf(file_path: str) -> Dict[str, Any]:
             "processing_time_seconds": processing_time.total_seconds()
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error processing PDF: {e}")
-        raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error processing PDF") from e
 
 
 def get_system_status() -> Dict[str, Any]:
     """Get the current status of the QA system with detailed metrics"""
     global vector_store, qa_chain, llm_cache, query_cache
 
+    with state_lock:
+        current_vector_store = vector_store
+        current_qa_chain = qa_chain
+        cached_models = list(llm_cache.keys())
+        cache_size = len(query_cache)
+
     status = {
         "status": "ok",  # Add the required status field
-        "pdf_uploaded": vector_store is not None,
-        "qa_chain_ready": qa_chain is not None,
+        "pdf_uploaded": current_vector_store is not None,
+        "qa_chain_ready": current_qa_chain is not None,
         "embedding_model": "sklearn-tfidf-optimized",
         "ollama_model": OLLAMA_MODEL,
         "ollama_base_url": OLLAMA_BASE_URL,
@@ -338,12 +351,12 @@ def get_system_status() -> Dict[str, Any]:
     }
 
     # Add vector store stats if available
-    if vector_store is not None:
+    if current_vector_store is not None:
         try:
             # Get index stats from FAISS
             index_stats = {
-                "vector_count": vector_store.index.ntotal,
-                "vector_dimension": vector_store.index.d
+                "vector_count": current_vector_store.index.ntotal,
+                "vector_dimension": current_vector_store.index.d
             }
             status["vector_store"] = index_stats
         except Exception as e:
@@ -352,8 +365,8 @@ def get_system_status() -> Dict[str, Any]:
 
     # Add cache stats
     status["cache"] = {
-        "llm_models_cached": list(llm_cache.keys()),
-        "query_cache_size": len(query_cache),
+        "llm_models_cached": cached_models,
+        "query_cache_size": cache_size,
         "query_cache_max_size": MAX_CACHE_SIZE
     }
 

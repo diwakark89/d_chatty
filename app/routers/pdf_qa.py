@@ -1,15 +1,24 @@
 import os
 import tempfile
 from datetime import datetime
+import logging
 
 from fastapi import APIRouter, File, UploadFile
 from fastapi import Query, HTTPException
 
 from app import qa_service
 from app.config import MAX_UPLOAD_SIZE
-from app.models import QuestionAnswerResponse, StatusResponse
+from app.models import QuestionAnswerResponse
 
 router = APIRouter(prefix="/pdf", tags=["PDF QA"])
+logger = logging.getLogger(__name__)
+
+
+def _looks_like_pdf(signature_bytes: bytes) -> bool:
+    """Validate PDF signature in the first kilobyte."""
+    if not signature_bytes:
+        return False
+    return b"%PDF" in signature_bytes[:1024]
 
 
 @router.post("/upload")
@@ -17,31 +26,49 @@ async def upload_pdf(file: UploadFile = File(...)):
     """
     Upload a PDF file for processing
     """
-    # Check file size limit
-    if file.size and file.size > MAX_UPLOAD_SIZE:
-        raise HTTPException(status_code=413, detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE/(1024*1024)}MB")
-
-    # Check file type
-    if not file.filename.lower().endswith(".pdf"):
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted")
+
+    if file.size and file.size > MAX_UPLOAD_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE / (1024 * 1024):.1f}MB",
+        )
+
+    temp_path = None
 
     try:
         # Create a temporary file to save the uploaded content
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
-            # Read the file in chunks to handle large files
-            content = await file.read()
-            temp_file.write(content)
+            total_size = 0
+            header_bytes = b""
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+
+                if len(header_bytes) < 1024:
+                    header_bytes += chunk[: 1024 - len(header_bytes)]
+
+                total_size += len(chunk)
+                if total_size > MAX_UPLOAD_SIZE:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE / (1024 * 1024):.1f}MB",
+                    )
+
+                temp_file.write(chunk)
+
             temp_path = temp_file.name
+
+        if total_size == 0:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+        if not _looks_like_pdf(header_bytes):
+            raise HTTPException(status_code=400, detail="Uploaded file content is not a valid PDF")
 
         # Process the PDF in qa_service
         result = qa_service.process_pdf(temp_path)
-
-        # Clean up the temporary file
-        try:
-            os.unlink(temp_path)
-        except Exception as e:
-            # Just log this error, don't fail the whole request
-            print(f"Warning: Failed to delete temporary file {temp_path}: {e}")
 
         # Return success response
         return {
@@ -54,9 +81,15 @@ async def upload_pdf(file: UploadFile = File(...)):
     except HTTPException:
         # Re-raise HTTP exceptions
         raise
-    except Exception as e:
+    except Exception as exc:
         # Handle any other errors
-        raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error processing PDF") from exc
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+            except OSError as exc:
+                logger.warning("Failed to delete temporary file %s: %s", temp_path, exc)
 
 
 @router.get("/ask", response_model=QuestionAnswerResponse)
@@ -73,10 +106,12 @@ async def ask_question(
         return QuestionAnswerResponse(
             status="success",
             query=query,
-            model=model,
+            model=result.get("model"),
             answer=result["answer"],
             source_documents=result["source_documents"],
             timestamp=datetime.now().isoformat()
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Error processing question") from exc

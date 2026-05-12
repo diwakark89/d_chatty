@@ -1,15 +1,10 @@
 from typing import Dict, List, Any, Optional
 from pydantic import BaseModel, Field
-from typing import Dict, List, Any, Optional
-
-from pydantic import BaseModel, Field
 
 
 class SourceDocument(BaseModel):
     content: str
     metadata: Dict[str, Any]
-
-
 
 class StatusResponse(BaseModel):
     """System status response model"""

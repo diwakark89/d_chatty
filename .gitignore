@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+<<<<<<< HEAD
 # C extensions
 *.so
 
@@ -192,3 +193,44 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+=======
+# Virtual environments
+.venv/
+.venv_py*/
+venv/
+env/
+
+# Environment variables
+.env
+
+# Logs
+*.log
+
+# Uploads directory
+uploads/
+
+# Persistence data
+data/
+*.pkl
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*.iml
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+temp/
+tmp/
+basic_app.py
+>>>>>>> master

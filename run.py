@@ -1,6 +1,8 @@
 # run.py - Entry point for the application
-import uvicorn
 import os
+
+import uvicorn
+
 
 # Detect the proper application module path
 def find_app_module():
@@ -34,9 +36,8 @@ if __name__ == "__main__":
                 sys.exit(1)
 
         # Start the server with reload enabled
-        uvicorn.run(app_module, host="0.0.0.0", port=8000, reload=True)
+        uvicorn.run(app_module, host="0.0.0.0", port=8000, reload=False)
     except Exception as e:
         print(f"ERROR: Failed to start server: {e}")
-        print("Try running 'fix_dependencies.bat' to resolve dependency issues")
         import sys
         sys.exit(1)

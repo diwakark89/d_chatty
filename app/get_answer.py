@@ -1,8 +1,13 @@
-# app/get_answer.py - Handler for getting answers from QA chain
+import logging
 from typing import Dict, Any, Optional, Callable
 from fastapi import HTTPException
 
-def get_answer(qa_chain, vector_store, query: str, model_name: Optional[str] = None, initialize_func: Callable = None) -> Dict[str, Any]:
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def get_answer(qa_chain, vector_store, query: str, model_name: Optional[str] = None, 
+               initialize_func: Optional[Callable] = None) -> Dict[str, Any]:
     """Implementation of getting an answer from the QA chain
 
     Args:
@@ -27,11 +32,12 @@ def get_answer(qa_chain, vector_store, query: str, model_name: Optional[str] = N
         # Check if we need to initialize the QA chain with a specific model
         if qa_chain is None or (model_name is not None):
             if initialize_func:
-                initialize_func(model_name)
+                qa_chain = initialize_func(model_name)
             else:
                 raise HTTPException(status_code=500, detail="QA chain initialization function not provided")
 
         # Execute the query
+        logger.info(f"Querying with: {query[:50]}...")
         result = qa_chain({"query": query})
 
         # Extract and format the answer
@@ -41,21 +47,20 @@ def get_answer(qa_chain, vector_store, query: str, model_name: Optional[str] = N
         source_docs = []
         if "source_documents" in result:
             for doc in result["source_documents"]:
-                # Truncate long content for better readability
-                content = doc.page_content
-                if len(content) > 200:
-                    content = content[:200] + "..."
-
                 source_docs.append({
-                    "content": content,
+                    "content": doc.page_content,
                     "metadata": doc.metadata
                 })
 
         return {
             "answer": answer,
-            "source_documents": source_docs
+            "source_documents": source_docs,
+            "model": model_name,
+            "query": query
         }
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
     except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=500, detail=f"Error getting answer: {str(e)}")
+        logger.error(f"Error getting answer: {e}")
+        raise HTTPException(status_code=500, detail=f"Error processing question: {str(e)}")

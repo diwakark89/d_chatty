@@ -1,11 +1,17 @@
+import logging
 import os
-import uuid
+import shutil
 import tempfile
-from typing import List, Dict, Any
-from fastapi import UploadFile, HTTPException
+import uuid
 from datetime import datetime
+from typing import List, Dict, Any
+from typing import Optional
+
+from fastapi import UploadFile, HTTPException
+
 from app.config import UPLOAD_DIR
 
+logger = logging.getLogger(__name__)
 # Ensure upload directory exists
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
@@ -34,6 +40,43 @@ async def save_file(file: UploadFile) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Error uploading file: {str(e)}")
 
 
+async def create_temp_file(file: UploadFile) -> str:
+    """Create a temporary file from an uploaded file
+
+    Args:
+        file: The uploaded file object
+
+    Returns:
+        Path to the temporary file
+    """
+    try:
+        # Create a temporary file
+        suffix = os.path.splitext(file.filename)[1] if file.filename else ".pdf"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+            # Copy uploaded file content to temporary file
+            shutil.copyfileobj(file.file, temp_file)
+            temp_path = temp_file.name
+
+        logger.info(f"Created temporary file: {temp_path}")
+        return temp_path
+    except Exception as e:
+        logger.error(f"Error creating temporary file: {e}")
+        raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+
+
+def delete_temp_file(file_path: str) -> None:
+    """Delete a temporary file
+
+    Args:
+        file_path: Path to the temporary file
+    """
+    try:
+        if os.path.exists(file_path):
+            os.unlink(file_path)
+            logger.info(f"Deleted temporary file: {file_path}")
+    except Exception as e:
+        logger.error(f"Error deleting temporary file {file_path}: {e}")
+
 async def save_multiple_files(files: List[UploadFile]) -> List[Dict[str, Any]]:
     """Save multiple files to disk and return file information"""
     results = []
@@ -49,41 +92,3 @@ async def save_multiple_files(files: List[UploadFile]) -> List[Dict[str, Any]]:
             })
 
     return results
-
-
-async def create_temp_file(file: UploadFile) -> str:
-    """Create a temporary file from an uploaded file
-
-    Args:
-        file: The uploaded file
-
-    Returns:
-        Path to the temporary file
-    """
-    # Validate file type for PDF endpoints
-    if file.filename and file.filename.lower().endswith('.pdf'):
-        suffix = '.pdf'
-    else:
-        suffix = os.path.splitext(file.filename)[1] if file.filename else ''
-
-    try:
-        # Create temporary file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
-            content = await file.read()
-            temp_file.write(content)
-            return temp_file.name
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error creating temporary file: {str(e)}")
-
-
-def delete_temp_file(file_path: str) -> None:
-    """Delete a temporary file
-
-    Args:
-        file_path: Path to the temporary file
-    """
-    if file_path and os.path.exists(file_path):
-        try:
-            os.unlink(file_path)
-        except Exception as e:
-            print(f"Warning: Could not delete temporary file {file_path}: {e}")

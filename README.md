@@ -1,4 +1,5 @@
 # DChatty - PDF Question Answering System
+# PDF QA Application
 
 DChatty is a robust PDF Question Answering system built with FastAPI, Langchain, and Ollama. It allows users to upload PDF documents and ask questions about their content, receiving accurate answers with source references.
 

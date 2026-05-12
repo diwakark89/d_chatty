@@ -12,6 +12,14 @@ uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 uvicorn app:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
+## Notes on Persistence
+
+The application now supports persistence of uploaded PDFs across server restarts. However, there are some important considerations:
+
+- In development mode with `--reload`, when code changes are detected, the application will restart and the saved state will be reloaded
+- In production mode with multiple workers (`--workers`), each worker process must load the same saved state
+- For more details on persistence, see the `docs/persistence.md` file
+
 ### Custom Log Level
 ```bash
 uvicorn app:app --host 0.0.0.0 --port 8000 --reload --log-level debug
@@ -46,6 +54,38 @@ gunicorn app:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
 
 ```bash
 uvicorn app:app --host 0.0.0.0 --port 8000 --workers 4
+```
+
+### Memory Optimization
+
+The application has been optimized for better memory usage. To monitor memory consumption:
+
+```bash
+# Install psutil if not already installed
+pip install psutil
+
+# Run with memory monitoring enabled
+MEMORY_MONITORING=true uvicorn app:app --host 0.0.0.0 --port 8000
+```
+
+### Vector Store Performance
+
+The FAISS vector store has been optimized with these considerations:
+
+1. **Sparse vs. Dense Embeddings**: Using TF-IDF with sparse matrices for efficiency
+2. **Limiting Vocabulary Size**: Using `max_features` parameter to control memory usage
+3. **Caching**: Query responses are cached to improve repeated question performance
+
+### Ollama LLM Optimization
+
+To optimize Ollama performance:
+
+```bash
+# Set Ollama to use smaller, faster models for development
+export OLLAMA_MODEL=phi3:mini  # Smaller, faster model
+
+# Or set in .env file
+OLLAMA_MODEL=phi3:mini
 ```
 
 ## App-specific Commands
